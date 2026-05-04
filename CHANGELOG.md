@@ -26,6 +26,9 @@ Initial development release.
 - Added optional JSON:API response profiles with `type`/`id`/`attributes` and
   relationship conventions, including response DSL defaults, OpenAPI schemas,
   and TypeScript client output.
+- Added auth contracts, app-provided authentication and authorization adapter
+  behaviours, `NbJson.Plug.Secure`, OpenAPI security generation, and generated
+  TypeScript bearer/API key auth header support.
 - Added production smoke coverage for fresh Phoenix installation, real
   Phoenix/OpenApiSpex request flow, and strict TypeScript client compilation.
 - Fixed installer companion dependency handling so fresh apps receive

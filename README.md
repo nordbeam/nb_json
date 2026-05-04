@@ -182,6 +182,75 @@ end
 The plug infers the controller/action in Phoenix. For router pipelines or other
 Plug apps, pass `controller:` and `endpoint:` explicitly.
 
+## Auth And Authorization
+
+`nb_json` treats auth as API contract metadata plus adapter-based enforcement.
+Your Phoenix app still owns users, tokens, sessions, tenants, roles, and policy
+rules.
+
+Declare authentication and authorization next to the endpoint contract:
+
+```elixir
+json_endpoint :show,
+  method: :get,
+  path: "/api/accounts/:account_id/users/:id",
+  auth: [scheme: :bearer, scopes: ["users:read"]] do
+  params do
+    field :account_id, :uuid, location: :path
+    field :id, :uuid, location: :path
+  end
+
+  authorize resource: :user, action: :read, id: :id, tenant: :account_id
+
+  response 200 do
+    data :user, ref(UserSerializer)
+  end
+end
+```
+
+Provide app adapters:
+
+```elixir
+defmodule MyAppWeb.ApiAuth do
+  @behaviour NbJson.Auth
+
+  def authenticate(conn, auth, _opts) do
+    # Verify bearer/API key/session credentials with your app.
+    # Return {:ok, subject, claims} or {:error, :missing | :invalid | :expired}.
+  end
+end
+
+defmodule MyAppWeb.ApiPolicy do
+  @behaviour NbJson.Authorization
+
+  def authorize(current_user, requirement, conn, _opts) do
+    # Evaluate tenant/object/action policy with your app rules.
+    :ok
+  end
+end
+```
+
+Configure them once and plug them before request validation:
+
+```elixir
+config :nb_json,
+  auth_adapter: MyAppWeb.ApiAuth,
+  authorization_adapter: MyAppWeb.ApiPolicy
+
+plug NbJson.Plug.Secure
+plug NbJson.Plug.Validate
+```
+
+`NbJson.Plug.Secure` runs authentication and authorization in order. Successful
+authentication stores `:nb_json_subject` and `:nb_json_claims` in both assigns
+and private data. Failures return standard `401` or `403` error envelopes, with
+`WWW-Authenticate` for bearer failures.
+
+The same `auth:` declaration generates OpenAPI security requirements and
+security schemes. Supported defaults include `:bearer`, `:basic`, `:api_key`,
+and `:cookie`. Custom schemes must pass `security_scheme:` plus `open_api:`, or
+`open_api: nil` when you provide the component through OpenAPI generation opts.
+
 ## OpenAPI
 
 Generate an OpenAPI document from controller declarations. Serializer refs that
@@ -293,6 +362,14 @@ import { usersIndex } from '@/api';
 
 const response = await usersIndex({ page: 2, search: 'ada' });
 response.data.users;
+```
+
+Generated clients accept a bearer token, async token provider, or explicit auth
+header map through request options:
+
+```typescript
+await usersIndex({ page: 1 }, { auth: () => auth.getAccessToken() });
+await usersIndex({ page: 1 }, { auth: { "x-api-key": apiKey } });
 ```
 
 By default, serializer refs import the matching generated serializer types, which

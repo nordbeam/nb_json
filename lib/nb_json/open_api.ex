@@ -143,8 +143,30 @@ defmodule NbJson.OpenApi do
     %{"schemas" => serializer_components(endpoints, opts)}
     |> maybe_put(
       "securitySchemes",
-      normalize_security_schemes(Keyword.get(opts, :security_schemes))
+      security_schemes(endpoints, opts)
     )
+  end
+
+  defp security_schemes(endpoints, opts) do
+    configured = normalize_security_schemes(Keyword.get(opts, :security_schemes)) || %{}
+
+    inferred =
+      endpoints
+      |> Enum.flat_map(fn {_module, endpoint} ->
+        endpoint
+        |> Map.get(:auth)
+        |> case do
+          nil -> []
+          auth -> [NbJson.Auth.open_api_security_scheme(auth)]
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+      |> Map.new(fn {name, scheme} -> {to_string(name), normalize_security_scheme(scheme)} end)
+
+    case Map.merge(inferred, configured) do
+      empty when empty == %{} -> nil
+      schemes -> schemes
+    end
   end
 
   defp serializer_components(endpoints, opts) do

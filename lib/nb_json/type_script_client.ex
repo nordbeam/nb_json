@@ -90,8 +90,16 @@ defmodule NbJson.TypeScriptClient do
 
     export type ApiHeaders = Record<string, string>;
 
+    export type ApiAuthProvider =
+      | string
+      | ApiHeaders
+      | null
+      | undefined
+      | (() => string | ApiHeaders | null | undefined | Promise<string | ApiHeaders | null | undefined>);
+
     export type ApiRequestOptions = {
       headers?: ApiHeaders;
+      auth?: ApiAuthProvider;
       credentials?: "include" | "omit" | "same-origin";
       signal?: unknown;
       fetcher?: ApiFetcher;
@@ -191,14 +199,27 @@ defmodule NbJson.TypeScriptClient do
       return Object.keys(value).length > 0;
     }
 
+    async function resolveAuthHeaders(auth?: ApiAuthProvider): Promise<ApiHeaders> {
+      const value = typeof auth === "function" ? await auth() : auth;
+
+      if (!value) return {};
+      if (typeof value === "string") {
+        return { Authorization: value.startsWith("Bearer ") ? value : `Bearer ${value}` };
+      }
+
+      return value;
+    }
+
     async function requestJson<T>(path: string, options: ApiRequestOptions & { method: string; body?: string } = { method: "GET" }): Promise<T> {
       const fetcher = options.fetcher ?? fetch;
-      const { fetcher: _fetcher, ...requestOptions } = options;
+      const { fetcher: _fetcher, auth, ...requestOptions } = options;
+      const authHeaders = await resolveAuthHeaders(auth);
 
       const response = await fetcher(path, {
         ...requestOptions,
         headers: {
           Accept: "application/json",
+          ...authHeaders,
           ...requestOptions.headers,
         },
       });

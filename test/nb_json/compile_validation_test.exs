@@ -215,6 +215,58 @@ defmodule NbJson.CompileValidationTest do
     """)
   end
 
+  test "auth and authorization declarations validate at compile time" do
+    assert_compile_error("auth :scheme is required", """
+    json_endpoint :show, auth: [scheme: nil] do
+      response 200 do
+        data :ok, :boolean
+      end
+    end
+    """)
+
+    assert_compile_error("auth :open_api is required for custom auth scheme :hmac", """
+    json_endpoint :show, auth: [scheme: :hmac] do
+      response 200 do
+        data :ok, :boolean
+      end
+    end
+    """)
+
+    assert_compile_error("auth :scheme string must be one of bearer", """
+    json_endpoint :show, auth: [scheme: "hmac"] do
+      response 200 do
+        data :ok, :boolean
+      end
+    end
+    """)
+
+    assert_compile_error("authorize/1 expects a keyword list or map", """
+    json_endpoint :show do
+      authorize "bad"
+
+      response 200 do
+        data :ok, :boolean
+      end
+    end
+    """)
+
+    assert_compile_error("authorize/1 must be used inside json_endpoint", """
+    authorize resource: :user
+    """)
+
+    assert_compile_error("authorize/1 must be used directly inside json_endpoint", """
+    json_endpoint :show do
+      params do
+        authorize resource: :user
+      end
+
+      response 200 do
+        data :ok, :boolean
+      end
+    end
+    """)
+  end
+
   defp assert_compile_error(expected, body, opts \\ []) do
     module = unique_module()
 

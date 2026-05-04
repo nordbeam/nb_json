@@ -203,6 +203,7 @@ if Code.ensure_loaded?(Igniter) do
           - Validate requests inside controllers that use `NbJson.Controller`:
 
               plug OpenApiSpex.Plug.CastAndValidate, json_render_error_v2: true
+              # plug NbJson.Plug.Secure  # when endpoints declare auth:
               plug NbJson.Plug.Validate
 
           - Serve the spec from a route that passes through the API pipeline:

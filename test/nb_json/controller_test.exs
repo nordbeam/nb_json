@@ -10,11 +10,17 @@ defmodule NbJson.ControllerTest do
   defmodule UsersController do
     use NbJson.Controller
 
-    json_endpoint :index, method: :get, path: "/api/users", summary: "List users" do
+    json_endpoint :index,
+      method: :get,
+      path: "/api/users",
+      summary: "List users",
+      auth: [scheme: :bearer, scopes: ["users:read"]] do
       params do
         field(:page, :integer, optional: true)
         field(:search, :string, optional: true)
       end
+
+      authorize(resource: :user, action: :list)
 
       response 200, description: "Users response" do
         data(:users, list_of(ref(UserSerializer)))
@@ -47,6 +53,8 @@ defmodule NbJson.ControllerTest do
              index: %{
                method: "get",
                path: "/api/users",
+               auth: %{scheme: :bearer, scopes: ["users:read"], security_scheme: :bearerAuth},
+               authorizations: [%{resource: :user, action: :list}],
                params: params,
                responses: responses
              }

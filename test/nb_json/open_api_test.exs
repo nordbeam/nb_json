@@ -157,6 +157,32 @@ defmodule NbJson.OpenApiTest do
     end
   end
 
+  defmodule AuthController do
+    use NbJson.Controller
+
+    json_endpoint :show,
+      method: :get,
+      path: "/api/secure/users/{id}",
+      auth: [scheme: :bearer, scopes: ["users:read"], bearer_format: "JWT"] do
+      params do
+        field(:id, :uuid, location: :path)
+      end
+
+      response 200 do
+        data(:user, ref(UserSerializer))
+      end
+    end
+
+    json_endpoint :optional,
+      method: :get,
+      path: "/api/optional",
+      auth: [scheme: :api_key, optional: true, name: "x-api-key"] do
+      response 200 do
+        data(:ok, :boolean)
+      end
+    end
+  end
+
   defmodule ApiSpec do
     use NbJson.OpenApiSpex,
       controllers: [NbJson.OpenApiTest.RichUsersController],
@@ -299,6 +325,31 @@ defmodule NbJson.OpenApiTest do
 
     assert author_relationship["required"] == ["data"]
     assert schema["properties"]["meta"]["properties"]["request_id"] == %{"type" => "string"}
+  end
+
+  test "generates OpenAPI security from auth contracts" do
+    doc = NbJson.OpenApi.to_map(AuthController)
+
+    assert doc["components"]["securitySchemes"]["bearerAuth"] == %{
+             "type" => "http",
+             "scheme" => "bearer",
+             "bearerFormat" => "JWT"
+           }
+
+    assert doc["components"]["securitySchemes"]["apiKeyAuth"] == %{
+             "type" => "apiKey",
+             "name" => "x-api-key",
+             "in" => "header"
+           }
+
+    assert doc["paths"]["/api/secure/users/{id}"]["get"]["security"] == [
+             %{"bearerAuth" => ["users:read"]}
+           ]
+
+    assert doc["paths"]["/api/optional"]["get"]["security"] == [
+             %{},
+             %{"apiKeyAuth" => []}
+           ]
   end
 
   test "builds an OpenApiSpex operation for a controller action" do

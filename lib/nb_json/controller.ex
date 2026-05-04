@@ -20,6 +20,7 @@ defmodule NbJson.Controller do
       Module.register_attribute(__MODULE__, :nb_json_current_context, accumulate: false)
       Module.register_attribute(__MODULE__, :nb_json_params, accumulate: true)
       Module.register_attribute(__MODULE__, :nb_json_responses, accumulate: true)
+      Module.register_attribute(__MODULE__, :nb_json_authorizations, accumulate: true)
       Module.register_attribute(__MODULE__, :nb_json_response_data, accumulate: true)
       Module.register_attribute(__MODULE__, :nb_json_response_meta, accumulate: true)
 
@@ -88,18 +89,23 @@ defmodule NbJson.Controller do
       Module.put_attribute(__MODULE__, :nb_json_current_endpoint, unquote(name))
       Module.delete_attribute(__MODULE__, :nb_json_params)
       Module.delete_attribute(__MODULE__, :nb_json_responses)
+      Module.delete_attribute(__MODULE__, :nb_json_authorizations)
 
       unquote(block)
 
       params = (Module.get_attribute(__MODULE__, :nb_json_params) || []) |> Enum.reverse()
       responses = (Module.get_attribute(__MODULE__, :nb_json_responses) || []) |> Enum.reverse()
 
+      authorizations =
+        (Module.get_attribute(__MODULE__, :nb_json_authorizations) || []) |> Enum.reverse()
+
       endpoint =
         NbJson.Controller.build_endpoint_config!(
           unquote(name),
           unquote(opts),
           params,
-          responses
+          responses,
+          authorizations
         )
 
       endpoints = Module.get_attribute(__MODULE__, :nb_json_endpoints) || %{}
@@ -119,6 +125,7 @@ defmodule NbJson.Controller do
       Module.delete_attribute(__MODULE__, :nb_json_current_context)
       Module.delete_attribute(__MODULE__, :nb_json_params)
       Module.delete_attribute(__MODULE__, :nb_json_responses)
+      Module.delete_attribute(__MODULE__, :nb_json_authorizations)
     end
   end
 
@@ -273,6 +280,30 @@ defmodule NbJson.Controller do
   end
 
   @doc """
+  Declares an authorization requirement for the current endpoint.
+
+      authorize resource: :user, action: :read, id: :id, tenant: :account_id
+  """
+  defmacro authorize(opts \\ []) do
+    quote bind_quoted: [opts: opts] do
+      unless Module.get_attribute(__MODULE__, :nb_json_current_endpoint) do
+        raise ArgumentError, "authorize/1 must be used inside json_endpoint/2"
+      end
+
+      if Module.get_attribute(__MODULE__, :nb_json_current_context) do
+        raise ArgumentError,
+              "authorize/1 must be used directly inside json_endpoint/2, not inside params/1 or response/2"
+      end
+
+      Module.put_attribute(
+        __MODULE__,
+        :nb_json_authorizations,
+        NbJson.Controller.build_authorization_config!(opts)
+      )
+    end
+  end
+
+  @doc """
   Builds an explicit serializer tuple for JSON response assigns.
   """
   @spec serialize(module(), any()) :: {module(), any()}
@@ -284,11 +315,12 @@ defmodule NbJson.Controller do
     do: {serializer, data, opts}
 
   @doc false
-  def build_endpoint_config!(name, opts, params, responses)
+  def build_endpoint_config!(name, opts, params, responses, authorizations \\ [])
       when is_atom(name) and is_list(opts) do
     method = normalize_method(Keyword.get(opts, :method, :get))
     path = Keyword.get(opts, :path)
     params = Enum.map(params, &default_param_location(&1, method, path))
+    auth = NbJson.Auth.normalize!(Keyword.get(opts, :auth))
 
     validate_field_names!(params, "params", name)
     validate_param_locations!(params, name)
@@ -304,7 +336,9 @@ defmodule NbJson.Controller do
       description: Keyword.get(opts, :description),
       tags: List.wrap(Keyword.get(opts, :tags, [])),
       deprecated: Keyword.get(opts, :deprecated, false),
-      security: Keyword.get(opts, :security),
+      auth: auth,
+      authorizations: authorizations,
+      security: Keyword.get(opts, :security) || NbJson.Auth.open_api_security(auth),
       servers: Keyword.get(opts, :servers),
       request_body_description: Keyword.get(opts, :request_body_description),
       params: params,
@@ -323,6 +357,11 @@ defmodule NbJson.Controller do
       example: Keyword.get(opts, :example)
     }
     |> maybe_put(:default, Keyword.get(opts, :default), Keyword.has_key?(opts, :default))
+  end
+
+  @doc false
+  def build_authorization_config!(opts) do
+    NbJson.Authorization.normalize_requirement!(opts)
   end
 
   @doc false
@@ -575,7 +614,8 @@ defmodule NbJson.Controller do
     end
   end
 
-  defp fetch_endpoint(controller, endpoint) do
+  @doc false
+  def fetch_endpoint(controller, endpoint) do
     if function_exported?(controller, :__nb_json_endpoints__, 0) do
       case controller.__nb_json_endpoints__() do
         %{^endpoint => config} -> {:ok, config}
