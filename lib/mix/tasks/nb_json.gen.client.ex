@@ -2,14 +2,17 @@ defmodule Mix.Tasks.NbJson.Gen.Client do
   @shortdoc "Generates a TypeScript API client from NbJson controller contracts"
 
   @moduledoc """
-  Generates a dependency-free TypeScript fetch client from modules that use
-  `NbJson.Controller`.
+  Generates a TypeScript fetch client from modules that use `NbJson.Controller`.
+  The default output is dependency-free; pass `--react-query` to also emit
+  TanStack React Query hooks and query option factories.
 
   ## Usage
 
       mix nb_json.gen.client MyAppWeb.UserController --output assets/js/api.ts
 
       mix nb_json.gen.client MyAppWeb.UserController --no-serializer-imports
+
+      mix nb_json.gen.client MyAppWeb.UserController --react-query
   """
 
   use Mix.Task
@@ -18,7 +21,12 @@ defmodule Mix.Tasks.NbJson.Gen.Client do
   def run(argv) do
     {opts, modules, _invalid} =
       OptionParser.parse(argv,
-        switches: [output: :string, title: :string, serializer_imports: :boolean],
+        switches: [
+          output: :string,
+          react_query: :boolean,
+          serializer_imports: :boolean,
+          title: :string
+        ],
         aliases: [o: :output]
       )
 
@@ -33,7 +41,7 @@ defmodule Mix.Tasks.NbJson.Gen.Client do
 
     generator_opts =
       opts
-      |> Keyword.take([:serializer_imports])
+      |> Keyword.take([:react_query, :serializer_imports])
       |> Keyword.put(:title, opts[:title] || "nb_json API client")
 
     NbJson.TypeScriptClient.write!(modules, output, generator_opts)

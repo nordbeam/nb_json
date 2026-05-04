@@ -7,6 +7,12 @@ defmodule NbJson.ProductionSmokeTest do
   defmodule ClientController do
     use NbJson.Controller
 
+    json_endpoint :health, method: :get, path: "/api/health" do
+      response 200 do
+        data(:ok, :boolean)
+      end
+    end
+
     json_endpoint :index, method: :get, path: "/api/users/:account_id" do
       params do
         field(:account_id, :uuid, location: :path)
@@ -41,6 +47,12 @@ defmodule NbJson.ProductionSmokeTest do
         type: "articles",
         relationships: [author: [type: "people"]] do
         data(:article, :map)
+      end
+    end
+
+    json_endpoint :logout, method: :delete, path: "/api/session" do
+      response 200 do
+        data(:ok, :boolean)
       end
     end
   end
@@ -94,14 +106,31 @@ defmodule NbJson.ProductionSmokeTest do
     File.mkdir_p!(output_dir)
 
     api_path = Path.join(output_dir, "api.ts")
+    react_api_path = Path.join(output_dir, "react_api.ts")
     NbJson.TypeScriptClient.write!(ClientController, api_path, serializer_imports: false)
+
+    NbJson.TypeScriptClient.write!(ClientController, react_api_path,
+      react_query: true,
+      serializer_imports: false
+    )
+
+    run!(
+      "npm",
+      [
+        "install",
+        "--silent",
+        "--save-dev",
+        "@tanstack/react-query@5",
+        "@types/react@19",
+        "react@19",
+        "typescript@5.9.3"
+      ],
+      cd: output_dir
+    )
 
     run!(
       "npx",
       [
-        "--yes",
-        "--package",
-        "typescript@5.9.3",
         "tsc",
         "--noEmit",
         "--strict",
@@ -109,9 +138,12 @@ defmodule NbJson.ProductionSmokeTest do
         "ES2020",
         "--module",
         "ESNext",
+        "--moduleResolution",
+        "Bundler",
         "--lib",
         "ES2020,DOM",
-        api_path
+        api_path,
+        react_api_path
       ],
       cd: output_dir
     )

@@ -312,6 +312,49 @@ generated type bundle:
 mix nb_ts.gen --output-dir assets/js/types
 ```
 
+### React Query
+
+React apps should use TanStack React Query for caching, background refetching,
+mutations, optimistic updates, and server-state lifecycles. `nb_json` can emit
+query keys, query option factories, and hooks next to the raw fetch helpers:
+
+```bash
+npm install @tanstack/react-query
+mix nb_json.gen.client MyAppWeb.UserController \
+  --output assets/js/api.ts \
+  --react-query
+```
+
+Generated `GET` endpoints include stable query keys, reusable query options, and
+hooks:
+
+```typescript
+import { usersIndexQueryOptions, useUsersIndex } from '@/api';
+
+const users = useUsersIndex({ page: 1 });
+
+// Also works with loaders, prefetching, and SSR helpers:
+queryClient.prefetchQuery(usersIndexQueryOptions({ page: 1 }));
+```
+
+Generated non-`GET` endpoints become mutations:
+
+```typescript
+import { useUsersCreate, usersIndexQueryRootKey } from '@/api';
+
+const createUser = useUsersCreate({
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: usersIndexQueryRootKey() });
+  }
+});
+
+createUser.mutate({ name: 'Ada', active: true });
+```
+
+The raw fetch functions are still generated in the same file, so teams can use
+React Query in app code while keeping tests, scripts, and non-React clients on
+plain promises.
+
 ## JSON:API Profile
 
 APIs that prefer JSON:API conventions can opt in per response. The profile keeps

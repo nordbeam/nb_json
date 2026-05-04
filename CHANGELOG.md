@@ -17,6 +17,9 @@ Initial development release.
   endpoint contracts.
 - Added a standalone TypeScript fetch client generator in `nb_json`, including
   nested Phoenix query encoding for Flop-style filters.
+- Added opt-in TanStack React Query client generation with query keys, query
+  option factories, hooks for `GET` endpoints, and mutation hooks for write
+  endpoints.
 - Added compile-time DSL verification for duplicate declarations, response
   contracts, path params, shape fields, status codes, and opt-in controller
   action checks.

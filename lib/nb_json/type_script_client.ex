@@ -1,11 +1,13 @@
 defmodule NbJson.TypeScriptClient do
   @moduledoc """
-  Generates dependency-free TypeScript fetch clients from `NbJson.Controller`
-  contracts.
+  Generates TypeScript fetch clients from `NbJson.Controller` contracts.
 
   `nb_ts` can include this client in a broader generated type bundle, but the
   generator lives here so `mix nb_json.gen.client` works in API-only projects
   without requiring a separate TypeScript package.
+
+  By default the generated client is dependency-free. Pass `react_query: true`
+  to also emit TanStack React Query keys, option factories, and hooks.
   """
 
   @doc """
@@ -39,11 +41,14 @@ defmodule NbJson.TypeScriptClient do
   def to_typescript_from_endpoints(endpoints, opts) do
     [
       preamble(opts),
+      react_query_imports(opts),
       serializer_imports(endpoints, opts),
       fallback_ref_aliases(endpoints, opts),
       json_api_types(endpoints),
+      react_query_shared_types(opts),
       Enum.map_join(endpoints, "\n\n", &endpoint_types/1),
-      Enum.map_join(endpoints, "\n\n", &endpoint_function/1)
+      Enum.map_join(endpoints, "\n\n", &endpoint_function/1),
+      react_query_endpoints(endpoints, opts)
     ]
     |> Enum.reject(&(&1 == ""))
     |> Enum.join("\n\n")
@@ -230,6 +235,24 @@ defmodule NbJson.TypeScriptClient do
     end
   end
 
+  defp react_query_imports(opts) do
+    if Keyword.get(opts, :react_query, false) do
+      """
+      import {
+        queryOptions as tanstackQueryOptions,
+        useMutation,
+        useQuery,
+        type UseMutationOptions,
+        type UseMutationResult,
+        type UseQueryOptions,
+        type UseQueryResult,
+      } from "@tanstack/react-query";
+      """
+    else
+      ""
+    end
+  end
+
   defp fallback_ref_aliases(endpoints, opts) do
     imported =
       if Keyword.get(opts, :serializer_imports, true) do
@@ -279,6 +302,24 @@ defmodule NbJson.TypeScriptClient do
         links?: Record<string, unknown>;
         meta?: Record<string, unknown>;
       };
+      """
+    else
+      ""
+    end
+  end
+
+  defp react_query_shared_types(opts) do
+    if Keyword.get(opts, :react_query, false) do
+      """
+      export type ApiQueryOptions<TData, TKey extends readonly unknown[]> =
+        Omit<UseQueryOptions<TData, ApiError, TData, TKey>, "queryKey" | "queryFn"> & {
+          request?: ApiRequestOptions;
+        };
+
+      export type ApiMutationOptions<TData, TVariables> =
+        Omit<UseMutationOptions<TData, ApiError, TVariables>, "mutationFn"> & {
+          request?: ApiRequestOptions;
+        };
       """
     else
       ""
@@ -487,6 +528,154 @@ defmodule NbJson.TypeScriptClient do
       });
     }
     """
+  end
+
+  defp react_query_endpoints(endpoints, opts) do
+    if Keyword.get(opts, :react_query, false) do
+      endpoints
+      |> Enum.map_join("\n\n", &react_query_endpoint/1)
+    else
+      ""
+    end
+  end
+
+  defp react_query_endpoint({module, %{method: "get"} = endpoint}) do
+    prefix = type_prefix(module, endpoint)
+    function_name = function_name(module, endpoint)
+    response_type = "#{prefix}Response"
+    hook_name = "use#{prefix}"
+    query_root_key_name = "#{function_name}QueryRootKey"
+    query_key_name = "#{function_name}QueryKey"
+    query_options_name = "#{function_name}QueryOptions"
+    params_type = "#{prefix}Params"
+    params = endpoint.params
+    key_args = params_arg(params, params_type)
+    options_args = args_with_request(params, params_type)
+    hook_args = args_with_hook_options(params, params_type, response_type, query_key_name)
+    raw_call = endpoint_call(function_name, params, "request")
+    key_call = call_with_params(query_key_name, params)
+    query_options_call = call_with_params_and_request(query_options_name, params, "request")
+
+    """
+    export const #{query_root_key_name} = () => [#{inspect(function_name)}] as const;
+
+    export const #{query_key_name} = (#{key_args}) =>
+      #{query_key_value(query_root_key_name, params)};
+
+    export function #{query_options_name}(#{options_args}) {
+      return tanstackQueryOptions<#{response_type}, ApiError, #{response_type}, ReturnType<typeof #{query_key_name}>>({
+        queryKey: #{key_call},
+        queryFn: () => #{raw_call},
+      });
+    }
+
+    export function #{hook_name}(#{hook_args}): UseQueryResult<#{response_type}, ApiError> {
+      const { request, ...query } = options;
+
+      return useQuery({
+        ...#{query_options_call},
+        ...query,
+      });
+    }
+    """
+  end
+
+  defp react_query_endpoint({module, endpoint}) do
+    prefix = type_prefix(module, endpoint)
+    function_name = function_name(module, endpoint)
+    response_type = "#{prefix}Response"
+    variables_type = "#{prefix}Variables"
+    hook_name = "use#{prefix}"
+    mutation_key_name = "#{function_name}MutationKey"
+    mutation_options_name = "#{function_name}MutationOptions"
+    params = endpoint.params
+    variables = variables_type(params, "#{prefix}Params")
+    mutation_fn = mutation_fn(function_name, params, variables_type)
+
+    """
+    export type #{variables_type} = #{variables};
+
+    export const #{mutation_key_name} = () => [#{inspect(function_name)}] as const;
+
+    export function #{mutation_options_name}(
+      request: ApiRequestOptions = {}
+    ): UseMutationOptions<#{response_type}, ApiError, #{variables_type}> {
+      return {
+        mutationKey: #{mutation_key_name}(),
+        mutationFn: #{mutation_fn},
+      };
+    }
+
+    export function #{hook_name}(
+      options: ApiMutationOptions<#{response_type}, #{variables_type}> = {}
+    ): UseMutationResult<#{response_type}, ApiError, #{variables_type}> {
+      const { request, ...mutation } = options;
+
+      return useMutation({
+        ...#{mutation_options_name}(request),
+        ...mutation,
+      });
+    }
+    """
+  end
+
+  defp params_arg([], _params_type), do: ""
+
+  defp params_arg(params, params_type) do
+    if Enum.all?(params, &param_optional?/1) do
+      "params: #{params_type} = {}"
+    else
+      "params: #{params_type}"
+    end
+  end
+
+  defp args_with_request([], _params_type), do: "request: ApiRequestOptions = {}"
+
+  defp args_with_request(params, params_type) do
+    "#{params_arg(params, params_type)}, request: ApiRequestOptions = {}"
+  end
+
+  defp args_with_hook_options([], _params_type, response_type, query_key_name) do
+    "options: ApiQueryOptions<#{response_type}, ReturnType<typeof #{query_key_name}>> = {}"
+  end
+
+  defp args_with_hook_options(params, params_type, response_type, query_key_name) do
+    params_arg = params_arg(params, params_type)
+
+    "#{params_arg}, options: ApiQueryOptions<#{response_type}, ReturnType<typeof #{query_key_name}>> = {}"
+  end
+
+  defp query_key_value(query_root_key_name, []) do
+    "#{query_root_key_name}()"
+  end
+
+  defp query_key_value(query_root_key_name, _params) do
+    "[...#{query_root_key_name}(), params] as const"
+  end
+
+  defp call_with_params(function_name, []), do: "#{function_name}()"
+  defp call_with_params(function_name, _params), do: "#{function_name}(params)"
+
+  defp call_with_params_and_request(function_name, [], request_var),
+    do: "#{function_name}(#{request_var})"
+
+  defp call_with_params_and_request(function_name, _params, request_var),
+    do: "#{function_name}(params, #{request_var})"
+
+  defp endpoint_call(function_name, [], request_var), do: "#{function_name}(#{request_var})"
+
+  defp endpoint_call(function_name, _params, request_var),
+    do: "#{function_name}(params, #{request_var})"
+
+  defp variables_type([], _params_type), do: "void"
+  defp variables_type(_params, params_type), do: params_type
+
+  defp mutation_fn(function_name, [], _variables_type) do
+    "() => #{function_name}(request)"
+  end
+
+  defp mutation_fn(function_name, _params, variables_type) do
+    "(params: #{variables_type}) => #{function_name}(params, request)"
   end
 
   defp keys_for_location(params, location) do
