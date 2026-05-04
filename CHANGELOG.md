@@ -1,0 +1,28 @@
+# Changelog
+
+## 0.1.0
+
+Initial development release.
+
+- Added `nb_serializer` metadata expansion for OpenAPI component schemas.
+- Added optional `open_api_spex` bridge via `NbJson.OpenApi.to_open_api_spex/2`
+  and `use NbJson.OpenApiSpex`.
+- Added endpoint operation metadata for tags, security, custom operation IDs,
+  deprecation, servers, and request body descriptions.
+- Added `NbJson.Plug.Validate` for contract-backed request validation in
+  Phoenix/Plug pipelines.
+- Added `NbJson.TestAssertions` for validating rendered responses against the
+  generated OpenApiSpex spec.
+- Added `flop_params/1` and `flop_meta/0` helpers for Flop-compatible list
+  endpoint contracts.
+- Added a standalone TypeScript fetch client generator in `nb_json`, including
+  nested Phoenix query encoding for Flop-style filters.
+- Added compile-time DSL verification for duplicate declarations, response
+  contracts, path params, shape fields, status codes, and opt-in controller
+  action checks.
+- Added production smoke coverage for fresh Phoenix installation, real
+  Phoenix/OpenApiSpex request flow, and strict TypeScript client compilation.
+- Fixed installer companion dependency handling so fresh apps receive
+  `open_api_spex` before the generated ApiSpec is compiled.
+- Removed compile warnings when optional `Decimal` or `NbSerializer.Config`
+  modules are not installed.
