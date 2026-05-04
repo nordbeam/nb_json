@@ -20,9 +20,14 @@ Initial development release.
 - Added compile-time DSL verification for duplicate declarations, response
   contracts, path params, shape fields, status codes, and opt-in controller
   action checks.
+- Added optional JSON:API response profiles with `type`/`id`/`attributes` and
+  relationship conventions, including response DSL defaults, OpenAPI schemas,
+  and TypeScript client output.
 - Added production smoke coverage for fresh Phoenix installation, real
   Phoenix/OpenApiSpex request flow, and strict TypeScript client compilation.
 - Fixed installer companion dependency handling so fresh apps receive
   `open_api_spex` before the generated ApiSpec is compiled.
+- Fixed serializer tuple detection so nested keyword data is not mistaken for
+  an `nb_serializer` module tuple.
 - Removed compile warnings when optional `Decimal` or `NbSerializer.Config`
   modules are not installed.

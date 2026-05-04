@@ -4,29 +4,37 @@ defmodule NbJson.Serializer do
   def materialize(value, opts \\ [])
 
   def materialize({serializer, data}, opts) when is_atom(serializer) do
-    materialize({serializer, data, []}, opts)
+    if serializer_module_atom?(serializer) do
+      materialize({serializer, data, []}, opts)
+    else
+      {serializer, materialize(data, opts)}
+    end
   end
 
-  def materialize({serializer, data, serializer_opts}, _opts)
+  def materialize({serializer, data, serializer_opts} = value, _opts)
       when is_atom(serializer) and is_list(serializer_opts) do
-    cond do
-      Code.ensure_loaded?(serializer) and function_exported?(serializer, :serialize, 2) ->
-        serialize_with_module(serializer, data, serializer_opts)
+    if serializer_module_atom?(serializer) do
+      cond do
+        Code.ensure_loaded?(serializer) and function_exported?(serializer, :serialize, 2) ->
+          serialize_with_module(serializer, data, serializer_opts)
 
-      Code.ensure_loaded?(NbSerializer) and function_exported?(NbSerializer, :serialize, 3) ->
-        case apply(NbSerializer, :serialize, [serializer, data, serializer_opts]) do
-          {:ok, result} ->
-            result
+        Code.ensure_loaded?(NbSerializer) and function_exported?(NbSerializer, :serialize, 3) ->
+          case apply(NbSerializer, :serialize, [serializer, data, serializer_opts]) do
+            {:ok, result} ->
+              result
 
-          {:error, reason} ->
-            raise ArgumentError, "failed to serialize JSON response: #{inspect(reason)}"
+            {:error, reason} ->
+              raise ArgumentError, "failed to serialize JSON response: #{inspect(reason)}"
 
-          result ->
-            result
-        end
+            result ->
+              result
+          end
 
-      true ->
-        data
+        true ->
+          data
+      end
+    else
+      value
     end
   end
 
@@ -54,4 +62,10 @@ defmodule NbJson.Serializer do
 
   defp struct?(%{__struct__: _}), do: true
   defp struct?(_value), do: false
+
+  defp serializer_module_atom?(atom) when is_atom(atom) do
+    atom
+    |> Atom.to_string()
+    |> String.starts_with?("Elixir.")
+  end
 end

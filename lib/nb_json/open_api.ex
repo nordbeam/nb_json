@@ -265,14 +265,18 @@ defmodule NbJson.OpenApi do
 
   defp response_body(%{kind: :success} = response) do
     schema =
-      %{
-        "type" => "object",
-        "properties" =>
-          %{
-            "data" => object_schema(response.data)
-          }
-          |> maybe_put("meta", object_schema(response.meta, omit_when_empty: true))
-      }
+      if Map.get(response, :profile) == :json_api do
+        json_api_response_schema(response)
+      else
+        %{
+          "type" => "object",
+          "properties" =>
+            %{
+              "data" => object_schema(response.data)
+            }
+            |> maybe_put("meta", object_schema(response.meta, omit_when_empty: true))
+        }
+      end
 
     %{
       "description" =>
@@ -294,6 +298,130 @@ defmodule NbJson.OpenApi do
       "application/json" => %{
         "schema" => schema
       }
+    }
+  end
+
+  defp json_api_response_schema(response) do
+    json_api = Map.get(response, :json_api, [])
+    data_field = List.first(response.data)
+
+    properties =
+      %{
+        "data" => json_api_data_schema(data_field.type, json_api)
+      }
+      |> maybe_put("meta", object_schema(response.meta, omit_when_empty: true))
+      |> maybe_put("links", %{"type" => "object", "additionalProperties" => true})
+      |> maybe_put("included", %{
+        "type" => "array",
+        "items" => json_api_resource_schema(:map, [])
+      })
+
+    %{
+      "type" => "object",
+      "properties" => properties,
+      "required" => ["data"]
+    }
+  end
+
+  defp json_api_data_schema({:list, inner}, json_api) do
+    %{"type" => "array", "items" => json_api_resource_schema(inner, json_api)}
+  end
+
+  defp json_api_data_schema(:list, json_api) do
+    %{"type" => "array", "items" => json_api_resource_schema(:map, json_api)}
+  end
+
+  defp json_api_data_schema(type, json_api), do: json_api_resource_schema(type, json_api)
+
+  defp json_api_resource_schema(type, json_api) do
+    relationships = json_api_relationships_schema(Keyword.get(json_api, :relationships, []))
+    resource_type = Keyword.get(json_api, :type)
+
+    properties =
+      %{
+        "type" => %{"type" => "string"},
+        "id" => %{"type" => "string"},
+        "attributes" => json_api_attributes_schema(type),
+        "links" => %{"type" => "object", "additionalProperties" => true},
+        "meta" => %{"type" => "object", "additionalProperties" => true}
+      }
+      |> maybe_put("relationships", relationships)
+
+    properties =
+      if resource_type do
+        update_in(properties, ["type"], &Map.put(&1, "example", to_string(resource_type)))
+      else
+        properties
+      end
+
+    %{
+      "type" => "object",
+      "properties" => properties,
+      "required" => ["type"]
+    }
+  end
+
+  defp json_api_attributes_schema({:list, inner}), do: json_api_attributes_schema(inner)
+
+  defp json_api_attributes_schema(:list),
+    do: %{"type" => "object", "additionalProperties" => true}
+
+  defp json_api_attributes_schema(type), do: schema(type)
+
+  defp json_api_relationships_schema([]), do: nil
+  defp json_api_relationships_schema(nil), do: nil
+
+  defp json_api_relationships_schema(relationships) when is_map(relationships) do
+    relationships
+    |> Map.to_list()
+    |> json_api_relationships_schema()
+  end
+
+  defp json_api_relationships_schema(relationships) when is_list(relationships) do
+    if json_api_relationship_pairs?(relationships) do
+      %{
+        "type" => "object",
+        "properties" =>
+          relationships
+          |> Enum.map(fn {name, _config} -> {to_string(name), json_api_relationship_schema()} end)
+          |> Map.new()
+      }
+    end
+  end
+
+  defp json_api_relationship_pairs?(relationships) do
+    Enum.all?(relationships, fn
+      {name, _config} when is_atom(name) or is_binary(name) -> true
+      _other -> false
+    end)
+  end
+
+  defp json_api_relationship_schema do
+    %{
+      "type" => "object",
+      "properties" => %{
+        "data" => %{
+          "oneOf" => [
+            json_api_identifier_schema(),
+            %{"type" => "array", "items" => json_api_identifier_schema()},
+            %{"type" => "object", "nullable" => true}
+          ]
+        },
+        "links" => %{"type" => "object", "additionalProperties" => true},
+        "meta" => %{"type" => "object", "additionalProperties" => true}
+      },
+      "required" => ["data"]
+    }
+  end
+
+  defp json_api_identifier_schema do
+    %{
+      "type" => "object",
+      "properties" => %{
+        "type" => %{"type" => "string"},
+        "id" => %{"type" => "string"}
+      },
+      "required" => ["type", "id"]
     }
   end
 

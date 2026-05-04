@@ -188,6 +188,33 @@ defmodule NbJson.CompileValidationTest do
              """)
   end
 
+  test "JSON:API response profile validates at compile time" do
+    assert_compile_error("JSON:API response profile requires exactly one data field", """
+    json_endpoint :show do
+      response 200, profile: :json_api do
+        data :user, :map
+        data :team, :map
+      end
+    end
+    """)
+
+    assert_compile_error("invalid response profile", """
+    json_endpoint :show do
+      response 200, profile: :xml do
+        data :user, :map
+      end
+    end
+    """)
+
+    assert_compile_error("JSON:API :relationships", """
+    json_endpoint :show do
+      response 200, profile: :json_api, relationships: :bad do
+        data :user, :map
+      end
+    end
+    """)
+  end
+
   defp assert_compile_error(expected, body, opts \\ []) do
     module = unique_module()
 

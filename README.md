@@ -312,6 +312,74 @@ generated type bundle:
 mix nb_ts.gen --output-dir assets/js/types
 ```
 
+## JSON:API Profile
+
+APIs that prefer JSON:API conventions can opt in per response. The profile keeps
+the same controller DSL, OpenAPI generation, TypeScript client output, and
+runtime rendering path:
+
+```elixir
+json_endpoint :show, method: :get, path: "/api/articles/:id" do
+  params do
+    field :id, :uuid, location: :path
+  end
+
+  response 200,
+    profile: :json_api,
+    type: "articles",
+    relationships: [author: [type: "people"], comments: [type: "comments"]] do
+    data :article, ref(ArticleSerializer)
+  end
+end
+
+def show(conn, %{"id" => id}) do
+  article = Blog.get_article!(id)
+
+  render_json(conn, :show,
+    article: %{
+      id: article.id,
+      title: article.title,
+      author: %{id: article.author_id},
+      comments: Enum.map(article.comments, &%{id: &1.id})
+    }
+  )
+end
+```
+
+The rendered document follows JSON:API resource object conventions:
+
+```json
+{
+  "data": {
+    "type": "articles",
+    "id": "1",
+    "attributes": {
+      "title": "Typed APIs"
+    },
+    "relationships": {
+      "author": {
+        "data": { "type": "people", "id": "2" }
+      },
+      "comments": {
+        "data": [{ "type": "comments", "id": "3" }]
+      }
+    }
+  }
+}
+```
+
+`profile: :json_api` requires exactly one `data` field in the response DSL, so
+bad contracts fail at compile time. At runtime `:meta`, `:links`, and
+`:included` assigns are lifted to the JSON:API top level. Direct helper usage is
+also available:
+
+```elixir
+NbJson.Response.success([user: %{id: 1, name: "Ada"}],
+  profile: :json_api,
+  type: "users"
+)
+```
+
 ## Production Smoke Checks
 
 The default suite covers the library and an in-process Phoenix/OpenApiSpex
@@ -362,10 +430,3 @@ meta :pagination, shape(page: :integer, total: :integer)
 data :subject, union([ref(UserSerializer), ref(TeamSerializer)])
 data :deleted_at, nullable(:datetime)
 ```
-
-## Roadmap
-
-- `nb_flop` pagination/filter response helpers.
-- Generated Phoenix integration app fixture for release verification.
-- Optional JSON:API profile for teams that prefer `data`, `attributes`, and
-  relationship conventions.

@@ -39,6 +39,19 @@ defmodule NbJson.TypeScriptClientTest do
       end
     end
 
+    json_endpoint :json_api_show, method: :get, path: "/api/json-api/users/:id" do
+      params do
+        field(:id, :uuid, location: :path)
+      end
+
+      response 200,
+        profile: :json_api,
+        type: "users",
+        relationships: [team: [type: "teams"]] do
+        data(:user, ref(UserSerializer))
+      end
+    end
+
     json_endpoint :create, method: :post, path: "/api/users" do
       params do
         field(:name, :string, location: :body)
@@ -110,6 +123,18 @@ defmodule NbJson.TypeScriptClientTest do
     assert ts =~ ~s|const body = pickParams(params, ["name", "active", "profile"]);|
     assert ts =~ ~s|method: "POST"|
     assert ts =~ ~s|"Content-Type": "application/json"|
+  end
+
+  test "generates JSON:API response types from response profiles" do
+    ts = NbJson.TypeScriptClient.to_typescript(UsersController)
+
+    assert ts =~ "export type JsonApiResourceIdentifier"
+    assert ts =~ "export type JsonApiRelationship"
+    assert ts =~ "export type JsonApiResource"
+    assert ts =~ "export interface UsersJsonApiShowResponse"
+    assert ts =~ "data: JsonApiResource<User, {"
+    assert ts =~ "team?: JsonApiRelationship;"
+    assert ts =~ "included?: Array<JsonApiResource>;"
   end
 
   test "can generate standalone fallback aliases without serializer imports" do

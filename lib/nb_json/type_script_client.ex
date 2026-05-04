@@ -41,6 +41,7 @@ defmodule NbJson.TypeScriptClient do
       preamble(opts),
       serializer_imports(endpoints, opts),
       fallback_ref_aliases(endpoints, opts),
+      json_api_types(endpoints),
       Enum.map_join(endpoints, "\n\n", &endpoint_types/1),
       Enum.map_join(endpoints, "\n\n", &endpoint_function/1)
     ]
@@ -250,6 +251,40 @@ defmodule NbJson.TypeScriptClient do
     |> Enum.map_join("\n", fn name -> "export type #{name} = Record<string, unknown>;" end)
   end
 
+  defp json_api_types(endpoints) do
+    if Enum.any?(endpoints, fn {_module, endpoint} -> json_api_endpoint?(endpoint) end) do
+      """
+      export type JsonApiResourceIdentifier = {
+        type: string;
+        id: string;
+        meta?: Record<string, unknown>;
+      };
+
+      export type JsonApiRelationship<
+        TData = JsonApiResourceIdentifier | JsonApiResourceIdentifier[] | null
+      > = {
+        data: TData;
+        links?: Record<string, unknown>;
+        meta?: Record<string, unknown>;
+      };
+
+      export type JsonApiResource<
+        TAttributes = Record<string, unknown>,
+        TRelationships = Record<string, JsonApiRelationship>
+      > = {
+        type: string;
+        id?: string;
+        attributes?: TAttributes;
+        relationships?: TRelationships;
+        links?: Record<string, unknown>;
+        meta?: Record<string, unknown>;
+      };
+      """
+    else
+      ""
+    end
+  end
+
   defp ref_modules(endpoints) do
     endpoints
     |> Enum.flat_map(fn {_module, endpoint} ->
@@ -261,6 +296,10 @@ defmodule NbJson.TypeScriptClient do
 
   defp response_fields(%{kind: :success} = response), do: response.data ++ response.meta
   defp response_fields(_response), do: []
+
+  defp json_api_endpoint?(endpoint) do
+    Enum.any?(endpoint.responses, &match?(%{kind: :success, profile: :json_api}, &1))
+  end
 
   defp endpoint_types({module, endpoint}) do
     prefix = type_prefix(module, endpoint)
@@ -290,6 +329,9 @@ defmodule NbJson.TypeScriptClient do
       nil ->
         "export type #{name} = unknown;"
 
+      %{profile: :json_api} = response ->
+        json_api_response_interface(name, response)
+
       response ->
         meta =
           if response.meta == [] do
@@ -306,6 +348,85 @@ defmodule NbJson.TypeScriptClient do
         }
         """
     end
+  end
+
+  defp json_api_response_interface(name, response) do
+    data_field = List.first(response.data)
+
+    meta =
+      if response.meta == [] do
+        ""
+      else
+        "\n  meta: {\n#{fields_to_typescript(response.meta, 4)}\n  };"
+      end
+
+    """
+    export interface #{name} {
+      data: #{json_api_data_typescript(data_field.type, response)};
+      links?: Record<string, unknown>;
+      included?: Array<JsonApiResource>;#{meta}
+    }
+    """
+  end
+
+  defp json_api_data_typescript({:list, inner}, response) do
+    "Array<#{json_api_resource_typescript(inner, response)}>"
+  end
+
+  defp json_api_data_typescript(:list, response) do
+    "Array<#{json_api_resource_typescript(:map, response)}>"
+  end
+
+  defp json_api_data_typescript(type, response), do: json_api_resource_typescript(type, response)
+
+  defp json_api_resource_typescript(type, response) do
+    attributes = json_api_attributes_typescript(type)
+
+    case json_api_relationships_typescript(response) do
+      "" -> "JsonApiResource<#{attributes}>"
+      relationships -> "JsonApiResource<#{attributes}, #{relationships}>"
+    end
+  end
+
+  defp json_api_attributes_typescript({:list, inner}), do: json_api_attributes_typescript(inner)
+  defp json_api_attributes_typescript(:list), do: "Record<string, unknown>"
+  defp json_api_attributes_typescript(type), do: type_to_typescript(type)
+
+  defp json_api_relationships_typescript(response) do
+    relationships =
+      response
+      |> Map.get(:json_api, [])
+      |> Keyword.get(:relationships, [])
+
+    cond do
+      relationships in [nil, []] ->
+        ""
+
+      is_map(relationships) ->
+        relationships |> Map.to_list() |> json_api_relationships_type_body()
+
+      json_api_relationship_pairs?(relationships) ->
+        json_api_relationships_type_body(relationships)
+
+      true ->
+        ""
+    end
+  end
+
+  defp json_api_relationships_type_body(relationships) do
+    fields =
+      relationships
+      |> Enum.map(fn {name, _config} -> "    #{property_name(name)}?: JsonApiRelationship;" end)
+      |> Enum.join("\n")
+
+    "{\n#{fields}\n  }"
+  end
+
+  defp json_api_relationship_pairs?(relationships) do
+    Enum.all?(relationships, fn
+      {name, _config} when is_atom(name) or is_binary(name) -> true
+      _other -> false
+    end)
   end
 
   defp endpoint_function({module, endpoint}) do

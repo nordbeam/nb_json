@@ -139,6 +139,24 @@ defmodule NbJson.OpenApiTest do
     end
   end
 
+  defmodule JsonApiController do
+    use NbJson.Controller
+
+    json_endpoint :show, method: :get, path: "/api/articles/{id}" do
+      params do
+        field(:id, :uuid, location: :path)
+      end
+
+      response 200,
+        profile: :json_api,
+        type: "articles",
+        relationships: [author: [type: "people"]] do
+        data(:article, ref(ArticleSerializer))
+        meta(:request_id, :string, optional: true)
+      end
+    end
+  end
+
   defmodule ApiSpec do
     use NbJson.OpenApiSpex,
       controllers: [NbJson.OpenApiTest.RichUsersController],
@@ -259,6 +277,28 @@ defmodule NbJson.OpenApiTest do
       assert spec.openapi == "3.0.3"
       assert Map.has_key?(spec.components.schemas, "RichUser")
     end
+  end
+
+  test "generates JSON:API response schemas from response profiles" do
+    doc = NbJson.OpenApi.to_map(JsonApiController)
+
+    schema =
+      doc["paths"]["/api/articles/{id}"]["get"]["responses"]["200"]["content"]["application/json"][
+        "schema"
+      ]
+
+    assert schema["required"] == ["data"]
+    assert schema["properties"]["data"]["properties"]["type"]["example"] == "articles"
+
+    assert schema["properties"]["data"]["properties"]["attributes"] == %{
+             "$ref" => "#/components/schemas/APIArticle"
+           }
+
+    assert %{"author" => author_relationship} =
+             schema["properties"]["data"]["properties"]["relationships"]["properties"]
+
+    assert author_relationship["required"] == ["data"]
+    assert schema["properties"]["meta"]["properties"]["request_id"] == %{"type" => "string"}
   end
 
   test "builds an OpenApiSpex operation for a controller action" do

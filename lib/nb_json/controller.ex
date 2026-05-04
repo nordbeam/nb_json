@@ -332,10 +332,15 @@ defmodule NbJson.Controller do
     validate_field_names!(data, "response #{status} data", :response)
     validate_field_names!(meta, "response #{status} meta", :response)
 
+    profile = normalize_response_profile!(Keyword.get(opts, :profile))
+    json_api = json_api_response_options!(profile, opts, data)
+
     %{
       kind: :success,
       status: status,
       description: Keyword.get(opts, :description),
+      profile: profile,
+      json_api: json_api,
       data: data,
       meta: meta
     }
@@ -352,6 +357,36 @@ defmodule NbJson.Controller do
       description: Keyword.get(opts, :description),
       details: Keyword.get(opts, :details, :map)
     }
+  end
+
+  defp normalize_response_profile!(nil), do: nil
+  defp normalize_response_profile!(:default), do: nil
+  defp normalize_response_profile!("default"), do: nil
+
+  defp normalize_response_profile!(profile)
+       when profile in [:json_api, :jsonapi, "json_api", "jsonapi"],
+       do: :json_api
+
+  defp normalize_response_profile!(profile) do
+    raise ArgumentError,
+          "invalid response profile #{inspect(profile)}. Use :json_api or omit :profile."
+  end
+
+  defp json_api_response_options!(nil, _opts, _data), do: []
+
+  defp json_api_response_options!(:json_api, opts, data) do
+    if length(data) != 1 do
+      raise ArgumentError,
+            "JSON:API response profile requires exactly one data field, got #{length(data)}"
+    end
+
+    json_api =
+      opts
+      |> NbJson.JsonApi.normalize_options!()
+      |> Keyword.put_new(:type, data |> hd() |> Map.fetch!(:name) |> Atom.to_string())
+
+    NbJson.JsonApi.validate_options!(json_api)
+    json_api
   end
 
   @doc false
@@ -380,8 +415,8 @@ defmodule NbJson.Controller do
   Builds a response payload for an endpoint.
   """
   @spec build_json(module(), atom(), map() | keyword(), keyword()) :: map()
-  def build_json(_controller, _endpoint, assigns, opts \\ []) do
-    Response.success(assigns, opts)
+  def build_json(controller, endpoint, assigns, opts \\ []) do
+    Response.success(assigns, response_render_options(controller, endpoint, opts))
   end
 
   @doc """
@@ -417,6 +452,58 @@ defmodule NbJson.Controller do
     payload = Response.validation_error(errors_or_changeset, Keyword.put(opts, :status, status))
 
     send_json(conn, payload, status)
+  end
+
+  defp response_render_options(controller, endpoint, opts) do
+    case response_config_for_render(controller, endpoint, Keyword.get(opts, :status)) do
+      %{profile: profile} = response when profile in [:json_api] ->
+        apply_response_render_defaults(opts, response)
+
+      _response ->
+        opts
+    end
+  end
+
+  defp response_config_for_render(controller, endpoint, status) do
+    with {:ok, config} <- fetch_endpoint(controller, endpoint) do
+      success_responses = Enum.filter(config.responses, &(&1.kind == :success))
+
+      by_status =
+        if is_integer(status) do
+          Enum.find(success_responses, &(&1.status == status))
+        end
+
+      by_status || List.first(success_responses)
+    else
+      _error -> nil
+    end
+  end
+
+  defp apply_response_render_defaults(opts, response) do
+    profile =
+      if Keyword.has_key?(opts, :profile) do
+        normalize_response_profile!(Keyword.fetch!(opts, :profile))
+      else
+        response.profile
+      end
+
+    opts =
+      if Keyword.has_key?(opts, :profile) do
+        opts
+      else
+        Keyword.put(opts, :profile, profile)
+      end
+
+    if profile == :json_api do
+      caller_json_api =
+        NbJson.JsonApi.normalize_options!(json_api: Keyword.get(opts, :json_api, []))
+
+      json_api = Keyword.merge(response.json_api || [], caller_json_api)
+
+      Keyword.put(opts, :json_api, json_api)
+    else
+      opts
+    end
   end
 
   @doc """

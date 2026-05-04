@@ -30,6 +30,19 @@ defmodule NbJson.ProductionSmokeTest do
         data(:id, :uuid)
       end
     end
+
+    json_endpoint :article, method: :get, path: "/api/articles/:id" do
+      params do
+        field(:id, :uuid, location: :path)
+      end
+
+      response 200,
+        profile: :json_api,
+        type: "articles",
+        relationships: [author: [type: "people"]] do
+        data(:article, :map)
+      end
+    end
   end
 
   test "a fresh Phoenix API project can install and compile nb_json" do

@@ -25,6 +25,23 @@ defmodule NbJson.ControllerTest do
     end
   end
 
+  defmodule JsonApiController do
+    use NbJson.Controller
+
+    json_endpoint :show, method: :get, path: "/api/users/:id" do
+      params do
+        field(:id, :integer, location: :path)
+      end
+
+      response 200,
+        profile: :json_api,
+        type: "users",
+        relationships: [team: [type: "teams"]] do
+        data(:user, :map)
+      end
+    end
+  end
+
   test "captures endpoint contracts at compile time" do
     assert %{
              index: %{
@@ -58,6 +75,22 @@ defmodule NbJson.ControllerTest do
     assert payload == %{
              data: %{users: [%{id: 1, name: "Ada"}]},
              meta: %{pagination: %{page: 1, total: 1}}
+           }
+  end
+
+  test "build_json applies JSON:API response DSL defaults" do
+    payload =
+      JsonApiController.build_json(:show,
+        user: %{id: 1, name: "Ada", team: %{id: 2, name: "Core"}}
+      )
+
+    assert payload == %{
+             data: %{
+               type: "users",
+               id: "1",
+               attributes: %{name: "Ada"},
+               relationships: %{team: %{data: %{type: "teams", id: "2"}}}
+             }
            }
   end
 end

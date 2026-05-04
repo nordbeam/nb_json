@@ -12,8 +12,13 @@ defmodule NbJson.Response do
 
   `:meta`, `:links`, and `:included` assigns are lifted to top-level envelope
   keys; all remaining assigns are nested under `:data`.
+
+  Pass `profile: :json_api` to render a JSON:API document instead. JSON:API
+  responses use one primary data assign and convert resources into
+  `type`/`id`/`attributes`/`relationships` objects.
   """
 
+  alias NbJson.JsonApi
   alias NbJson.Serializer
 
   @type assigns :: map() | keyword()
@@ -28,17 +33,22 @@ defmodule NbJson.Response do
     envelope? = Keyword.get(opts, :envelope, true)
     assigns = Serializer.materialize(assigns, opts)
 
-    if envelope? do
-      {meta, assigns} = Map.pop(assigns, :meta)
-      {links, assigns} = Map.pop(assigns, :links)
-      {included, data} = Map.pop(assigns, :included)
+    cond do
+      envelope? and json_api_profile?(Keyword.get(opts, :profile)) ->
+        JsonApi.document(assigns, opts)
 
-      %{data: data}
-      |> maybe_put(:meta, meta)
-      |> maybe_put(:links, links)
-      |> maybe_put(:included, included)
-    else
-      assigns
+      envelope? ->
+        {meta, assigns} = Map.pop(assigns, :meta)
+        {links, assigns} = Map.pop(assigns, :links)
+        {included, data} = Map.pop(assigns, :included)
+
+        %{data: data}
+        |> maybe_put(:meta, meta)
+        |> maybe_put(:links, links)
+        |> maybe_put(:included, included)
+
+      true ->
+        assigns
     end
   end
 
@@ -85,6 +95,11 @@ defmodule NbJson.Response do
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp json_api_profile?(profile) when profile in [:json_api, :jsonapi, "json_api", "jsonapi"],
+    do: true
+
+  defp json_api_profile?(_profile), do: false
 
   defp status_from(status) when is_integer(status), do: status
   defp status_from(:not_found), do: 404
