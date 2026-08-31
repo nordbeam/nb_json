@@ -68,7 +68,16 @@ defmodule NbJson.MixProject do
         "Documentation" => "https://hexdocs.pm/nb_json"
       },
       maintainers: ["nordbeam"],
-      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md .formatter.exs)
+      files: ~w(
+        lib
+        mix.exs
+        README.md
+        usage-rules.md
+        usage-rules
+        LICENSE
+        CHANGELOG.md
+        .formatter.exs
+      )
     ]
   end
 
@@ -77,7 +86,8 @@ defmodule NbJson.MixProject do
       main: "readme",
       source_url: @source_url,
       source_ref: "v#{@version}",
-      extras: ["README.md", "CHANGELOG.md"]
+      extras: ["README.md", "CHANGELOG.md", "usage-rules.md"],
+      groups_for_extras: [Guides: ["usage-rules.md"]]
     ]
   end
 end

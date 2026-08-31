@@ -73,4 +73,13 @@ defmodule Mix.Tasks.NbJson.InstallTest do
              ]) == ["--yes"]
     end
   end
+
+  test "hex package includes usage rules and the prebuilt skill" do
+    package_files = Mix.Project.config()[:package][:files]
+
+    assert "usage-rules.md" in package_files
+    assert "usage-rules" in package_files
+    assert File.exists?("usage-rules/skills/nb-json/SKILL.md")
+    refute File.exists?("skills/nb-json/SKILL.md")
+  end
 end
