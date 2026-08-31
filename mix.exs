@@ -47,8 +47,8 @@ defmodule NbJson.MixProject do
       {:nb_flop, github: "nordbeam/nb_flop", only: [:dev, :test], optional: true},
 
       # Installer and documentation
-      {:igniter, "~> 0.7", optional: true, runtime: false},
-      {:ex_doc, "~> 0.31", only: :dev, runtime: false}
+      {:igniter, "~> 0.8", optional: true, runtime: false},
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false}
     ]
   end
 

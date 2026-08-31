@@ -396,7 +396,7 @@ mutations, optimistic updates, and server-state lifecycles. `nb_json` can emit
 query keys, query option factories, and hooks next to the raw fetch helpers:
 
 ```bash
-npm install @tanstack/react-query
+vp add @tanstack/react-query
 mix nb_json.gen.client MyAppWeb.UserController \
   --output assets/js/api.ts \
   --react-query

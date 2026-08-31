@@ -47,9 +47,9 @@ defmodule NbJson.Authorization do
   @doc false
   def error_code(:forbidden), do: :forbidden
   def error_code(:unauthorized), do: :unauthorized
+  def error_code(false), do: :forbidden
   def error_code(reason) when is_atom(reason), do: reason
   def error_code(%{code: code}) when is_atom(code) or is_binary(code), do: code
-  def error_code(false), do: :forbidden
   def error_code(_reason), do: :forbidden
 
   @doc false

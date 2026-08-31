@@ -1,0 +1,4 @@
+interface:
+  display_name: "nb JSON"
+  short_description: "Build typed Phoenix JSON APIs and clients"
+  default_prompt: "Use $nb-json to implement or verify a version-aware typed Phoenix JSON API."

@@ -1,0 +1,22 @@
+{
+  "name": "nb_json",
+  "version": "0.1.0",
+  "description": "Version-aware Codex guidance for nb_json typed APIs, validation, authorization, OpenAPI, and clients.",
+  "author": { "name": "Nordbeam", "url": "https://github.com/nordbeam" },
+  "homepage": "https://github.com/nordbeam/nb_json",
+  "repository": "https://github.com/nordbeam/nb_json",
+  "license": "MIT",
+  "keywords": ["elixir", "phoenix", "json", "openapi", "typescript"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "nb_json",
+    "shortDescription": "Build typed Phoenix JSON APIs and clients",
+    "longDescription": "Install, configure, upgrade, diagnose, and verify nb_json endpoint contracts, validation, auth, OpenAPI, and generated TypeScript clients.",
+    "developerName": "Nordbeam",
+    "category": "Developer Tools",
+    "capabilities": ["Implement", "Generate", "Migrate", "Diagnose", "Verify"],
+    "websiteURL": "https://github.com/nordbeam/nb_json",
+    "brandColor": "#5E3AAE",
+    "defaultPrompt": ["Use $nb-json to implement or verify a typed Phoenix JSON API."]
+  }
+}

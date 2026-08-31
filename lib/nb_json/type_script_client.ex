@@ -777,12 +777,12 @@ defmodule NbJson.TypeScriptClient do
   defp unwrap_optional({:optional, inner}), do: inner
   defp unwrap_optional(type), do: type
 
-  defp literal_to_typescript(value) when is_binary(value), do: inspect(value)
-  defp literal_to_typescript(value) when is_atom(value), do: inspect(Atom.to_string(value))
-  defp literal_to_typescript(value) when is_number(value), do: to_string(value)
   defp literal_to_typescript(true), do: "true"
   defp literal_to_typescript(false), do: "false"
   defp literal_to_typescript(nil), do: "null"
+  defp literal_to_typescript(value) when is_binary(value), do: inspect(value)
+  defp literal_to_typescript(value) when is_atom(value), do: inspect(Atom.to_string(value))
+  defp literal_to_typescript(value) when is_number(value), do: to_string(value)
   defp literal_to_typescript(value), do: inspect(to_string(value))
 
   defp type_prefix(module, endpoint) do
